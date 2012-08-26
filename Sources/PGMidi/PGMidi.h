@@ -8,6 +8,21 @@
 
 #import "PGArc.h"
 
+// IMPORTANT: EVERY .m file needs to be changed to a .mm file in order to use C++ STL
+#include <queue>
+
+#ifndef PGMIDI_CLIENTNAME
+#define PGMIDI_CLIENTNAME @"MidiMonitor MIDI Client"
+#endif
+
+#ifndef PGMIDI_OUTPUTPORT
+#define PGMIDI_OUTPUTPORT @"MidiMonitor Output Port"
+#endif
+
+#ifndef PGMIDI_INPUTPORT
+#define PGMIDI_INPUTPORT @"MidiMonitor Input Port"
+#endif
+
 @class PGMidi;
 @class PGMidiSource;
 
@@ -56,7 +71,7 @@
 ///         HandlePacketData(packet->data, packet->length);
 ///         packet = MIDIPacketNext(packet);
 ///     }
-- (void) midiSource:(PGMidiSource*)input midiReceived:(const MIDIPacketList *)packetList;
+- (void) midiReceivedFromSource:(PGMidiSource*)midi;
 
 @end
 
@@ -66,6 +81,9 @@
 @interface PGMidiSource : PGMidiConnection
 {
     id<PGMidiSourceDelegate> delegate;
+@public
+    pthread_mutex_t midi_incoming_mutex;
+    std::queue<MIDIPacket> midi_incoming_queue;
 }
 @property (nonatomic,PGMIDI_DELEGATE_PROPERTY) id<PGMidiSourceDelegate> delegate;
 @end

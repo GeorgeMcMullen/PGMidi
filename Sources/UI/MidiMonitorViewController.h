@@ -10,10 +10,12 @@
 
 @class PGMidi;
 
-@interface MidiMonitorViewController : UIViewController
+@interface MidiMonitorViewController : UIViewController <UITableViewDelegate, UITableViewDataSource>
 {
     UILabel    *countLabel;
-    UITextView *textView;
+
+    UITableView *midiTableView;
+    NSMutableArray *dataSource;
 
     PGMidi *midi;
 }
@@ -21,14 +23,16 @@
 #if ! __has_feature(objc_arc)
 
 @property (nonatomic,retain) IBOutlet UILabel    *countLabel;
-@property (nonatomic,retain) IBOutlet UITextView *textView;
+@property (nonatomic,retain) IBOutlet UITableView *midiTableView;
+@property (nonatomic,retain) NSMutableArray *dataSource;
 
 @property (nonatomic,assign) PGMidi *midi;
 
 #else
 
 @property (nonatomic,strong) IBOutlet UILabel    *countLabel;
-@property (nonatomic,strong) IBOutlet UITextView *textView;
+@property (nonatomic,strong) IBOutlet UITableView *midiTableView;
+@property (nonatomic,strong) NSMutableArray *dataSource;
 
 @property (nonatomic,strong) PGMidi *midi;
 

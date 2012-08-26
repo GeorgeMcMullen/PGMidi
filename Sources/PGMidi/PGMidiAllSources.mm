@@ -47,9 +47,8 @@
 
 #pragma mark PGMidiSourceDelegate
 
-- (void) midiSource:(PGMidiSource*)input midiReceived:(const MIDIPacketList *)packetList
+- (void) midiReceivedFromSource:(PGMidiSource*)_midi
 {
-    [delegate midiSource:input midiReceived:packetList];
+    [delegate midiReceivedFromSource:_midi];
 }
-
 @end

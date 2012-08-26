@@ -25,13 +25,17 @@ UInt8 RandomNoteNumber() { return UInt8(rand() / (RAND_MAX / 127)); }
 #pragma mark PGMidiDelegate
 
 @synthesize countLabel;
-@synthesize textView;
 @synthesize midi;
+
+@synthesize midiTableView;
+@synthesize dataSource;
 
 #pragma mark UIViewController
 
 - (void) viewWillAppear:(BOOL)animated
 {
+    dataSource = [[NSMutableArray alloc] init];
+
     [self clearTextView];
     [self updateCountLabel];
 
@@ -43,13 +47,27 @@ UInt8 RandomNoteNumber() { return UInt8(rand() / (RAND_MAX / 127)); }
     {
         [self addString:@"You are running iOS before 4.2. CoreMIDI is not supported."];
     }
+    [midiTableView reloadData];
+}
+
+- (void) dealloc
+{
+    self.midi = nil;
+#if ! PGMIDI_ARC
+    [midiTableView release];
+    [dataSource release];
+    [countLabel release];
+    
+    [super dealloc];
+#endif
 }
 
 #pragma mark IBActions
 
 - (IBAction) clearTextView
 {
-    textView.text = nil;
+    [dataSource removeAllObjects];
+    [midiTableView reloadData];
 }
 
 const char *ToString(BOOL b) { return b ? "yes":"no"; }
@@ -76,6 +94,7 @@ NSString *ToString(PGMidiConnection *connection)
             [self addString:description];
         }
     })
+    [self refreshTable];
 }
 
 - (IBAction) sendMidiData
@@ -104,11 +123,7 @@ NSString *ToString(PGMidiConnection *connection)
 
 - (void) addString:(NSString*)string
 {
-    NSString *newText = [textView.text stringByAppendingFormat:@"\n%@", string];
-    textView.text = newText;
-
-    if (newText.length)
-        [textView scrollRangeToVisible:(NSRange){newText.length-1, 1}];
+    [dataSource addObject:string];
 }
 
 - (void) updateCountLabel
@@ -121,24 +136,28 @@ NSString *ToString(PGMidiConnection *connection)
     source.delegate = self;
     [self updateCountLabel];
     [self addString:[NSString stringWithFormat:@"Source added: %@", ToString(source)]];
+    [self refreshTable];
 }
 
 - (void) midi:(PGMidi*)midi sourceRemoved:(PGMidiSource *)source
 {
     [self updateCountLabel];
     [self addString:[NSString stringWithFormat:@"Source removed: %@", ToString(source)]];
+    [self refreshTable];
 }
 
 - (void) midi:(PGMidi*)midi destinationAdded:(PGMidiDestination *)destination
 {
     [self updateCountLabel];
-    [self addString:[NSString stringWithFormat:@"Desintation added: %@", ToString(destination)]];
+    [self addString:[NSString stringWithFormat:@"Destintation added: %@", ToString(destination)]];
+    [self refreshTable];
 }
 
 - (void) midi:(PGMidi*)midi destinationRemoved:(PGMidiDestination *)destination
 {
     [self updateCountLabel];
-    [self addString:[NSString stringWithFormat:@"Desintation removed: %@", ToString(destination)]];
+    [self addString:[NSString stringWithFormat:@"Destintation removed: %@", ToString(destination)]];
+    [self refreshTable];
 }
 
 NSString *StringFromPacket(const MIDIPacket *packet)
@@ -155,20 +174,26 @@ NSString *StringFromPacket(const MIDIPacket *packet)
            ];
 }
 
-- (void) midiSource:(PGMidiSource*)midi midiReceived:(const MIDIPacketList *)packetList
+- (void) midiReceivedFromSource:(PGMidiSource*)_midi
 {
-    [self performSelectorOnMainThread:@selector(addString:)
-                           withObject:@"MIDI received:"
-                        waitUntilDone:NO];
+    // You can do various other processing here if needed, but look out for memory errors
+    [self performSelectorOnMainThread:@selector(processMidiFromSource:) withObject:_midi waitUntilDone:NO];
+}
 
-    const MIDIPacket *packet = &packetList->packet[0];
-    for (int i = 0; i < packetList->numPackets; ++i)
+- (void) processMidiFromSource:(PGMidiSource*)_midi
+{
+    if (!_midi->midi_incoming_queue.empty())
+        [self addString:@"MIDI received:"];
+
+    while (!_midi->midi_incoming_queue.empty())
     {
-        [self performSelectorOnMainThread:@selector(addString:)
-                               withObject:StringFromPacket(packet)
-                            waitUntilDone:NO];
-        packet = MIDIPacketNext(packet);
+        MIDIPacket packet =  _midi->midi_incoming_queue.front();
+        [self addString:StringFromPacket(&packet)];
+        pthread_mutex_lock(&_midi->midi_incoming_mutex); // Lock the mutex only when writing to the queue
+        _midi->midi_incoming_queue.pop();
+        pthread_mutex_unlock(&_midi->midi_incoming_mutex);
     }
+    [self refreshTable];
 }
 
 - (void) sendMidiDataInBackground
@@ -185,4 +210,40 @@ NSString *StringFromPacket(const MIDIPacket *packet)
     }
 }
 
+#pragma mark - UITableViewDelegate methods
+- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    return 30.0f;
+}
+
+#pragma mark - UITableViewDataSource methods
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"MIDITableCell"];
+    if (cell == nil) {
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"MIDITableCell"];
+        [cell setBackgroundColor:[UIColor blackColor]];
+        [cell.textLabel setTextColor:[UIColor whiteColor]];
+    }
+    [cell.textLabel setText:[dataSource objectAtIndex:(NSUInteger)indexPath.row]];
+
+    return cell;
+}
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView
+{
+    return 1;
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
+{
+    return (NSInteger)[dataSource count];
+}
+
+- (void)refreshTable
+{
+    [midiTableView reloadData];
+    NSIndexPath* pathToScrollTo = [NSIndexPath indexPathForRow: (NSInteger)([dataSource count]-1) inSection: 0];
+    [midiTableView scrollToRowAtIndexPath: pathToScrollTo atScrollPosition: UITableViewScrollPositionTop animated: YES];
+}
 @end

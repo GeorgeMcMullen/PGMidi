@@ -117,13 +117,25 @@ BOOL IsNetworkSession(MIDIEndpointRef ref)
 // NOTE: Called on a separate high-priority thread, not the main runloop
 - (void) midiRead:(const MIDIPacketList *)pktlist
 {
-    [delegate midiSource:self midiReceived:pktlist];
+    // This has been modified to use a mutex and queue. See below why this should improve performance
+    // http://www.cocoabuilder.com/archive/cocoa/141913-thread-messaging-cocoa-thread.html
+
+    const MIDIPacket *packet = &pktlist->packet[0];
+    for (int i = 0; i < pktlist->numPackets; ++i)
+    {
+        pthread_mutex_lock(&midi_incoming_mutex); // Lock the mutex only when writing to the queue
+        midi_incoming_queue.push(*packet);
+        pthread_mutex_unlock(&midi_incoming_mutex);
+        packet = MIDIPacketNext(packet);
+    }
+ 
+    [delegate midiReceivedFromSource:self];
 }
 
 static
 void PGMIDIReadProc(const MIDIPacketList *pktlist, void *readProcRefCon, void *srcConnRefCon)
 {
-    PGMidiSource *self = arc_cast<PGMidiSource>(srcConnRefCon);
+    PGMidiSource *self = arc_cast<PGMidiSource>(srcConnRefCon); // This seems to leak in ARC mode
     [self midiRead:pktlist];
 }
 
@@ -145,7 +157,9 @@ void PGMIDIReadProc(const MIDIPacketList *pktlist, void *readProcRefCon, void *s
 
 - (void) sendBytes:(const UInt8*)bytes size:(UInt32)size
 {
-    NSLog(@"%s(%u bytes to core MIDI)", __func__, unsigned(size));
+#ifdef DEBUG
+    NSLog(@"%s(%u bytes to core MIDI)", __func__, unsigned(size)); // Only log in debug mode
+#endif
     assert(size < 65536);
     Byte packetBuffer[size+100];
     MIDIPacketList *packetList = (MIDIPacketList*)packetBuffer;
@@ -178,13 +192,13 @@ void PGMIDIReadProc(const MIDIPacketList *pktlist, void *readProcRefCon, void *s
         sources      = [NSMutableArray new];
         destinations = [NSMutableArray new];
 
-        OSStatus s = MIDIClientCreate((CFStringRef)@"MidiMonitor MIDI Client", PGMIDINotifyProc, arc_cast<void>(self), &client);
+        OSStatus s = MIDIClientCreate((CFStringRef)PGMIDI_CLIENTNAME, PGMIDINotifyProc, arc_cast<void>(self), &client);
         NSLogError(s, @"Create MIDI client");
 
-        s = MIDIOutputPortCreate(client, (CFStringRef)@"MidiMonitor Output Port", &outputPort);
+        s = MIDIOutputPortCreate(client, (CFStringRef)PGMIDI_OUTPUTPORT, &outputPort);
         NSLogError(s, @"Create output MIDI port");
 
-        s = MIDIInputPortCreate(client, (CFStringRef)@"MidiMonitor Input Port", PGMIDIReadProc, arc_cast<void>(self), &inputPort);
+        s = MIDIInputPortCreate(client, (CFStringRef)PGMIDI_INPUTPORT, PGMIDIReadProc, arc_cast<void>(self), &inputPort);
         NSLogError(s, @"Create input MIDI port");
 
         [self scanExistingDevices];
@@ -384,7 +398,9 @@ void PGMIDINotifyProc(const MIDINotification *message, void *refCon)
 
 - (void) sendBytes:(const UInt8*)data size:(UInt32)size
 {
-    NSLog(@"%s(%u bytes to core MIDI)", __func__, unsigned(size));
+#ifdef DEBUG
+    NSLog(@"%s(%u bytes to core MIDI)", __func__, unsigned(size)); // Only log in debug mode
+#endif
     assert(size < 65536);
     Byte packetBuffer[size+100];
     MIDIPacketList *packetList = (MIDIPacketList*)packetBuffer;
