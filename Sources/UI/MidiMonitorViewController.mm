@@ -118,6 +118,9 @@ NSString *ToString(PGMidiConnection *connection)
     midi = m;
     midi.delegate = self;
 
+    [midi setVirtualDestinationEnabled:YES];
+    [midi setVirtualSourceEnabled:YES];
+    
     [self attachToAllExistingSources];
 }
 

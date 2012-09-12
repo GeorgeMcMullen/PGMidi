@@ -122,6 +122,11 @@
     MIDIClientRef      client;
     MIDIPortRef        outputPort;
     MIDIPortRef        inputPort;
+    NSString          *virtualEndpointName;
+    MIDIEndpointRef    virtualSourceEndpoint;
+    MIDIEndpointRef    virtualDestinationEndpoint;
+    PGMidiSource      *virtualDestinationSource;
+    PGMidiDestination *virtualSourceDestination;
     id<PGMidiDelegate> delegate;
     NSMutableArray    *sources, *destinations;
 }
@@ -131,6 +136,12 @@
 @property (nonatomic,readonly) NSUInteger         numberOfConnections;
 @property (nonatomic,readonly) NSMutableArray    *sources;
 @property (nonatomic,readonly) NSMutableArray    *destinations;
+@property (nonatomic,readonly) PGMidiSource      *virtualDestinationSource;
+@property (nonatomic,readonly) PGMidiDestination *virtualSourceDestination;
+@property (nonatomic,retain)   NSString          *virtualEndpointName;
+@property (nonatomic,assign) BOOL networkEnabled;
+@property (nonatomic,assign) BOOL virtualSourceEnabled;
+@property (nonatomic,assign) BOOL virtualDestinationEnabled;
 
 /// Enables or disables CoreMIDI network connections
 - (void) enableNetwork:(BOOL)enabled;
